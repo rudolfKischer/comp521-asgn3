@@ -13,6 +13,7 @@ GameObject:
   - component: {fileID: 755479014476393872}
   - component: {fileID: 6462595042920725983}
   - component: {fileID: 7992297457785910353}
+  - component: {fileID: 8908048826839507168}
   m_Layer: 0
   m_Name: Human
   m_TagString: Agent
@@ -135,3 +136,17 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 112
   m_CollisionDetection: 0
+--- !u!114 &8908048826839507168
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2773871984176186962}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5ea0f357704d4bcf94293f72ee11dcb, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  goal: {fileID: 0}
+  speed: 1

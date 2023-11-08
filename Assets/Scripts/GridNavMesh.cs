@@ -21,6 +21,8 @@ public class GridNavMesh : NavMesh<Vector3>
   [SerializeField]
   private bool displayGridEdges = true;
 
+  //need to keep track of 
+
 
 
   private int PointIndex(int x, int z) {

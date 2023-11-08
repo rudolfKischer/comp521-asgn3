@@ -35,6 +35,9 @@ public class AgentManager : MonoBehaviour
     private GameObject chairPrefab;
     [SerializeField]
     private GameObject terrainObject;
+    [SerializeField]
+    private GameObject goalObject;
+
 
     private int gridSpacing;
 
@@ -144,6 +147,9 @@ public class AgentManager : MonoBehaviour
         gridSpacing = (int)(Mathf.Ceil(Mathf.Sqrt((numHumans + numChairs) * (1.0f / gridSparsity))));
 
         humans = InstatiateAgents(humanPrefab, numHumans);
+        for (int i = 0; i < humans.Count; i++) {
+            humans[i].GetComponent<Human>().goal = goalObject;
+        }
         chairs = InstatiateAgents(chairPrefab, numChairs);
 
         // distibute humans and chairs over the area of the terrain
