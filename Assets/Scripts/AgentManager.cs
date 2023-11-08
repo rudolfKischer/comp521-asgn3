@@ -11,6 +11,24 @@ public class AgentManager : MonoBehaviour
 {
     //Want to have a list of agents
 
+    public static AgentManager Instance { get; private set; }
+
+    private void Awake()
+    {
+        if (Instance == null)
+        {
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+        else
+        {
+            Destroy(gameObject);
+        }
+    }
+
+
+    
+
     [SerializeField]
     private GameObject humanPrefab;
     [SerializeField]
@@ -121,6 +139,7 @@ public class AgentManager : MonoBehaviour
 
 
     void SpawnAgents() {
+        ClearAgents();
 
         gridSpacing = (int)(Mathf.Ceil(Mathf.Sqrt((numHumans + numChairs) * (1.0f / gridSparsity))));
 
@@ -155,48 +174,34 @@ public class AgentManager : MonoBehaviour
 
     }
 
-    private void ClearAgents() {
-      for (int i = 0; i < global_agents.Count; i++) {
-        if (global_agents[i] != null) {
-          Destroy(global_agents[i]);
-          global_agents[i] = null;
-        }
-      }
-      global_agents.Clear();
+    //need to to clear agents on when we exit play mode
+
+
+    void OnDestroy()
+    {
+        ClearAgents();
     }
+
+private void ClearAgents() {
+    foreach (var agent in global_agents) {
+        if (agent != null) {
+#if UNITY_EDITOR
+            if (UnityEditor.EditorApplication.isPlaying) {
+                Destroy(agent);
+            } else {
+                DestroyImmediate(agent);
+            }
+#else
+            Destroy(agent);
+#endif
+        }
+    }
+    global_agents.Clear();
+}
 
 
 
     #if UNITY_EDITOR
-    void OnValidate()
-    {
-        if (Application.isPlaying) return;
-        UnityEditor.EditorApplication.delayCall += DelayedValidation;
-    }
-
-    private void DelayedValidation(){
-        if (this != null) // Check if the object still exists
-        {
-            UnityEditor.Undo.RecordObject(this, "AgentManager Validation");
-            ClearAgentsEditor();
-            SpawnAgents();
-            UnityEditor.EditorUtility.SetDirty(this);
-        }
-    }
-
-    private void ClearAgentsEditor()
-    {
-        for (int i = global_agents.Count - 1; i >= 0; i--)
-        {
-            if (global_agents[i] != null)
-            {
-                DestroyImmediate(global_agents[i], true); 
-                global_agents[i] = null; // Nullify the element.
-            }
-        }
-        global_agents.Clear();
-    }
-
     void DisplayGrid() {
         Gizmos.color = Color.red;
         Vector3 terrainPosition = terrainObject.transform.position;
@@ -215,6 +220,66 @@ public class AgentManager : MonoBehaviour
       }
     }
 
+    #endif
+
+
+    #if UNITY_EDITOR
+
+    void OnEnable()
+    {
+        UnityEditor.EditorApplication.playModeStateChanged += HandleOnPlayModeChanged;
+    }
+
+    void OnDisable()
+    {
+        UnityEditor.EditorApplication.playModeStateChanged -= HandleOnPlayModeChanged;
+    }
+
+    void OnValidate()
+    {
+      if (Application.isPlaying) return;
+      UnityEditor.EditorApplication.delayCall += DelayedValidation;
+        
+    }
+
+    private void DelayedValidation(){
+      if (this != null)
+      {
+        UnityEditor.Undo.RecordObject(this, "AgentManager Validation");
+        //destroy all children aswell
+        for (int i = transform.childCount - 1; i >= 0; --i)
+        {
+            GameObject child = transform.GetChild(i).gameObject;
+            // if the child is an agent has tag 'Agent' destroy it
+            if (child.CompareTag("Agent"))
+            {
+                if (UnityEditor.EditorApplication.isPlaying)
+                {
+                    Destroy(child.gameObject);
+                }
+                else
+                {
+                    DestroyImmediate(child.gameObject);
+                }
+            }
+
+        }
+
+        SpawnAgents();
+        UnityEditor.EditorUtility.SetDirty(this);
+
+      }
+
+    }
+
+    private void HandleOnPlayModeChanged(UnityEditor.PlayModeStateChange state)
+    {
+        if (state == UnityEditor.PlayModeStateChange.EnteredEditMode)
+        {
+            // Clean up when returning to edit mode, if necessary.
+            ClearAgents();
+        }
+    }
     #endif
 
 
