@@ -5,6 +5,8 @@ using Random = UnityEngine.Random;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 
+
+
 public class AgentManager : MonoBehaviour
 {
     //Want to have a list of agents
@@ -15,35 +17,60 @@ public class AgentManager : MonoBehaviour
     private GameObject chairPrefab;
     [SerializeField]
     private GameObject terrainObject;
-    [SerializeField]
-    private int gridSpacing = 10;
+
+    private int gridSpacing;
 
 
 
-    [SerializeField]
+    [SerializeField, Range(5, 100)]
     private int numHumans = 5;
-    [SerializeField]
+    [SerializeField, Range(5, 100)]
     private int numChairs = 10;          
+    [SerializeField, Range(0.001f, 1.0f)]
+    private float gridSparsity = 1.0f;
+    [SerializeField]
+    private float terrain_coverage = 0.8f;
+    [SerializeField]
+    private bool displayGrid = true;
 
     private List<GameObject> humans;
     private List<GameObject> chairs;
-
+    private List<GameObject> global_agents = new List<GameObject>();
+    private List<Vector2> gridPoints = new List<Vector2>();
     
     private List<GameObject> InstatiateAgents(GameObject prefab, int numAgents) {
         List<GameObject> agents = new List<GameObject>();
         for (int i = 0; i < numAgents; i++) {
             GameObject agent = Instantiate(prefab);
+            agent.transform.parent = transform;
             agents.Add(agent);
+            global_agents.Add(agent);
+
         }
         return agents;
     }
 
-    private List<Vector2> GridPoints(Vector2 yRange, Vector2 xRange, Vector2 spacing) {
+    private Vector2[,] PointGrid(Vector2 yRange, Vector2 xRange, Vector2 spaces) {
+        // Create a list of points that are spaced out over the range
+        Vector2 spacing = new Vector2( (xRange.y - xRange.x) / spaces.x, (yRange.y - yRange.x) / spaces.y);
+        Vector2[,] points = new Vector2[(int)spaces.x,(int)spaces.y];
+        for (int y = 0; y < spaces.y; y++) {
+            for (int x = 0; x < spaces.x; x++) {
+                points[x,y] = new Vector2(x * spacing.x + xRange.x, y * spacing.y + yRange.x);
+            }
+        }
+
+        return points;
+        
+    }
+
+    private List<Vector2> GridPoints(Vector2 yRange, Vector2 xRange, Vector2 spaces) {
         // Create a list of points that are spaced out over the range
         List<Vector2> points = new List<Vector2>();
-        for (float y = yRange.x; y <= yRange.y; y += spacing.y) {
-            for (float x = xRange.x; x <= xRange.y; x += spacing.x) {
-                points.Add(new Vector2(x, y));
+        Vector2[,] pointGrid = PointGrid(yRange, xRange, spaces);
+        for (int y = 0; y < spaces.y; y++) {
+            for (int x = 0; x < spaces.x; x++) {
+                points.Add(pointGrid[x,y]);
             }
         }
         return points;
@@ -61,24 +88,41 @@ public class AgentManager : MonoBehaviour
         }
     }
 
+    private float MidpointHeight(GameObject agent) {
+      //use collider to get the height of the agent
+      Vector3 globalScale = agent.transform.lossyScale;
+      Collider agentCollider = agent.GetComponent<Collider>();
+      if (agentCollider == null) {
+        return globalScale.y / 2.0f;
+      }
+      return agentCollider.bounds.size.y * globalScale.y / 2.0f;
+    }
+
     private void DistributeAgents(List<GameObject> agents, List<Vector2> points) {
         if (agents.Count > points.Count) {
             Debug.LogWarning("Not enough points to distribute all agents.");
+            return;
         }
 
         ShuffleList(points);
         for (int i = 0; i < agents.Count; i++) {
-            agents[i].transform.position = new Vector3(points[i].x, 0, points[i].y);
+            float midpointHeight = MidpointHeight(agents[i]);
+            agents[i].transform.position = new Vector3(points[i].x, midpointHeight , points[i].y);
         }
     }
 
     private void GridAgentDistribution(List<GameObject> agents, Vector2 yRange, Vector2 xRange, Vector2 spacing) {
         // Create a list of points that are spaced out over the range
-        List<Vector2> gridPoints = GridPoints(yRange, xRange, spacing);
+
+        gridPoints = GridPoints(yRange, xRange, spacing);
         DistributeAgents(agents, gridPoints);
     }
 
-    void Start() {
+
+
+    void SpawnAgents() {
+
+        gridSpacing = (int)(Mathf.Ceil(Mathf.Sqrt((numHumans + numChairs) * (1.0f / gridSparsity))));
 
         humans = InstatiateAgents(humanPrefab, numHumans);
         chairs = InstatiateAgents(chairPrefab, numChairs);
@@ -89,19 +133,89 @@ public class AgentManager : MonoBehaviour
         // get the dimensions of the terrain
         Vector3 terrainDimensions = terrainObject.transform.localScale;
         Vector3 terrainPosition = terrainObject.transform.position;
-        Vector2 terrainXRange = new Vector2(-terrainDimensions.x / 2.0f, terrainDimensions.x / 2.0f);
-        Vector2 terrainYRange = new Vector2(-terrainDimensions.y / 2.0f, terrainDimensions.y / 2.0f);
+
+        Vector2 terrainXRange = new Vector2(-terrainDimensions.x / 2.0f, terrainDimensions.x / 2.0f) * terrain_coverage;
+        Vector2 terrainZRange = new Vector2(-terrainDimensions.z / 2.0f, terrainDimensions.z / 2.0f) * terrain_coverage;
 
 
-        // distribute humans and chairs over the terrain
-        GridAgentDistribution(humans, terrainYRange, terrainXRange, new Vector2(gridSpacing, gridSpacing));
+        float horizontalSpacing = (terrainXRange.y - terrainXRange.x) / gridSpacing;
+        float verticalSpacing = (terrainZRange.y - terrainZRange.x) / gridSpacing;
+        float min_spaceing = Mathf.Min(horizontalSpacing, verticalSpacing);
+        //scale the agents to fit the grid spacing
+        for (int i = 0; i < humans.Count; i++) {
+            humans[i].transform.localScale = new Vector3(min_spaceing, min_spaceing, min_spaceing);
+        }
+        for (int i = 0; i < chairs.Count; i++) {
+            chairs[i].transform.localScale = new Vector3(min_spaceing, min_spaceing, min_spaceing);
+        }
+
+        GridAgentDistribution(global_agents, terrainZRange, terrainXRange, new Vector2(gridSpacing, gridSpacing));
+
+
 
     }
 
+    private void ClearAgents() {
+      for (int i = 0; i < global_agents.Count; i++) {
+        if (global_agents[i] != null) {
+          Destroy(global_agents[i]);
+          global_agents[i] = null;
+        }
+      }
+      global_agents.Clear();
+    }
 
-    // On start we randomly spawn n number of humans
-    // On start we randomly spawn n number of chairs
-    // they should be distributed randomly around the map, without overlapping
+
+
+    #if UNITY_EDITOR
+    void OnValidate()
+    {
+        if (Application.isPlaying) return;
+        UnityEditor.EditorApplication.delayCall += DelayedValidation;
+    }
+
+    private void DelayedValidation(){
+        if (this != null) // Check if the object still exists
+        {
+            UnityEditor.Undo.RecordObject(this, "AgentManager Validation");
+            ClearAgentsEditor();
+            SpawnAgents();
+            UnityEditor.EditorUtility.SetDirty(this);
+        }
+    }
+
+    private void ClearAgentsEditor()
+    {
+        for (int i = global_agents.Count - 1; i >= 0; i--)
+        {
+            if (global_agents[i] != null)
+            {
+                DestroyImmediate(global_agents[i], true); 
+                global_agents[i] = null; // Nullify the element.
+            }
+        }
+        global_agents.Clear();
+    }
+
+    void DisplayGrid() {
+        Gizmos.color = Color.red;
+        Vector3 terrainPosition = terrainObject.transform.position;
+        float terrainYLevel = terrainPosition.y + terrainObject.transform.localScale.y / 2.0f;
+
+        foreach (Vector2 point in gridPoints) {
+          Vector3 gizmoPoint = new Vector3(point.x, terrainYLevel, point.y);
+          Gizmos.DrawSphere(gizmoPoint, 0.1f);
+        }
+    }
+
+    void OnDrawGizmos()
+    {
+      if (terrainObject != null && gridPoints != null && displayGrid) {
+        DisplayGrid();
+      }
+    }
+
+    #endif
 
 
 }
