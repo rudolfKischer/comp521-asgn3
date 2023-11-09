@@ -31,6 +31,14 @@ public class GridNavMesh : NavMesh<Vector3>
     return (int)(x + z * numOfPointsX);
   }
 
+  private Vector2 IndexCoords(int index) {
+    int x = index % numOfPointsX;
+    int z = index / numOfPointsX;
+    return new Vector2(x, z);
+  }
+
+
+
 
 
   private Vector2 GetXRange() {
@@ -174,12 +182,54 @@ public class GridNavMesh : NavMesh<Vector3>
       occupiedCells[i] = false;
     }
     foreach (GameObject obj in objects) {
-      OccupyCell(obj.transform.position);
+      //do it for each point in the axis aligned bounding box of the objects collider
+      Collider collider = obj.GetComponent<Collider>();
+      if (collider == null) {
+        Debug.LogWarning("Object " + obj + " does not have a collider.");
+        continue;
+      }
+      // we want the 2 corner points of the collider
+      Vector3 minBound = collider.bounds.min;
+      Vector3 maxBound = collider.bounds.max;
+
+      // we want to convert these corner points to indices
+      // then because these are axis aligned
+      // we can just iterate through the points between the min and max x and z values
+      // and mark those cells as occupied
+
+      int minIndex = GetPointIndex(minBound);
+      int maxIndex = GetPointIndex(maxBound);
+      Vector2 minCoords = IndexCoords(minIndex);
+      Vector2 maxCoords = IndexCoords(maxIndex);
+
+      for (int z = (int)minCoords.y; z <= (int)maxCoords.y; z++) {
+        for (int x = (int)minCoords.x; x <= (int)maxCoords.x; x++) {
+          occupiedCells[PointIndex(x, z)] = true;
+        }
+      }
     }
   }
   
+  public void SetNumPoints(int x, int z) {
+    numOfPointsX = x;
+    numOfPointsZ = z;
+  }
 
-  void Setup() {
+  public void SetGridSize(float size) {
+    //do some calculations to figure out how many points we need to get grid tile to be size x size
+    // use collider bounds
+    Collider collider = GetComponent<Collider>();
+    float minX = collider.bounds.min.x;
+    float maxX = collider.bounds.max.x;
+    float minZ = collider.bounds.min.z;
+    float maxZ = collider.bounds.max.z;
+
+    numOfPointsX = (int)((maxX - minX) / size) + 1;
+    numOfPointsZ = (int)((maxZ - minZ) / size) + 1;
+
+  }
+
+  public void Setup() {
     //create the points
     CreatePoints();
     CreateEdges();

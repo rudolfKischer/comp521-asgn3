@@ -58,6 +58,10 @@ public class AgentManager : MonoBehaviour
     [SerializeField]
     private GameObject navigationTerrain;
 
+    //Goal object
+    [SerializeField]
+    private GameObject goal;
+
     private List<GameObject> humans;
     private List<GameObject> chairs;
     private List<GameObject> global_agents = new List<GameObject>();
@@ -70,6 +74,8 @@ public class AgentManager : MonoBehaviour
             agent.transform.parent = transform;
             agents.Add(agent);
             global_agents.Add(agent);
+            // shrink size by a very small amount to avoid overlapping agents
+            agent.transform.localScale = 0.95f * agent.transform.localScale;
 
         }
         return agents;
@@ -143,12 +149,33 @@ public class AgentManager : MonoBehaviour
         DistributeAgents(agents, gridPoints);
     }
 
+    private int GetGridSpacing() {
+      return (int)(Mathf.Ceil(Mathf.Sqrt((numHumans + numChairs) * (1.0f / gridSparsity))));
+    }
 
+    private Vector2[] GetTerrainRanges() {
+        // get the dimensions of the terrain
+        Vector3 terrainDimensions = terrainObject.transform.localScale;
+
+        Vector2 terrainXRange = new Vector2(-terrainDimensions.x / 2.0f, terrainDimensions.x / 2.0f) * terrain_coverage;
+        Vector2 terrainZRange = new Vector2(-terrainDimensions.z / 2.0f, terrainDimensions.z / 2.0f) * terrain_coverage;
+
+        return new Vector2[] {terrainXRange, terrainZRange};
+    }
+
+    private float GetMinSpacing(Vector2 terrainXRange, Vector2 terrainZRange) {
+        // get the dimensions of the terrain
+        gridSpacing = GetGridSpacing();
+        float horizontalSpacing = (terrainXRange.y - terrainXRange.x) / gridSpacing;
+        float verticalSpacing = (terrainZRange.y - terrainZRange.x) / gridSpacing;
+        return Mathf.Min(horizontalSpacing, verticalSpacing);
+
+    }
 
     void SpawnAgents() {
         ClearAgents();
 
-        gridSpacing = (int)(Mathf.Ceil(Mathf.Sqrt((numHumans + numChairs) * (1.0f / gridSparsity))));
+        gridSpacing = GetGridSpacing();
 
         humans = InstatiateAgents(humanPrefab, numHumans);
         for (int i = 0; i < humans.Count; i++) {
@@ -159,28 +186,21 @@ public class AgentManager : MonoBehaviour
         // distibute humans and chairs over the area of the terrain
         // assume the terrain is a axis aligned cube with any dimensions
 
-        // get the dimensions of the terrain
-        Vector3 terrainDimensions = terrainObject.transform.localScale;
-        Vector3 terrainPosition = terrainObject.transform.position;
-
-        Vector2 terrainXRange = new Vector2(-terrainDimensions.x / 2.0f, terrainDimensions.x / 2.0f) * terrain_coverage;
-        Vector2 terrainZRange = new Vector2(-terrainDimensions.z / 2.0f, terrainDimensions.z / 2.0f) * terrain_coverage;
-
-
-        float horizontalSpacing = (terrainXRange.y - terrainXRange.x) / gridSpacing;
-        float verticalSpacing = (terrainZRange.y - terrainZRange.x) / gridSpacing;
-        float min_spaceing = Mathf.Min(horizontalSpacing, verticalSpacing);
+        Vector2[] terrainRanges = GetTerrainRanges();
+        Vector2 terrainXRange = terrainRanges[0];
+        Vector2 terrainZRange = terrainRanges[1];
+        float min_spaceing = GetMinSpacing(terrainXRange, terrainZRange);
         //scale the agents to fit the grid spacing
         for (int i = 0; i < humans.Count; i++) {
-            humans[i].transform.localScale = new Vector3(min_spaceing, min_spaceing, min_spaceing);
+            humans[i].transform.localScale = min_spaceing * Vector3.one;
         }
         for (int i = 0; i < chairs.Count; i++) {
-            chairs[i].transform.localScale = new Vector3(min_spaceing, min_spaceing, min_spaceing);
+            chairs[i].transform.localScale = min_spaceing * Vector3.one;
         }
 
         GridAgentDistribution(global_agents, terrainZRange, terrainXRange, new Vector2(gridSpacing, gridSpacing));
 
-
+        
 
     }
 
@@ -189,7 +209,23 @@ public class AgentManager : MonoBehaviour
 
     void Start()
     {
-        SpawnAgents();
+        // GridNavMesh navMesh = navigationTerrain.GetComponent<GridNavMesh>();
+        // if (navMesh == null) {
+        //     Debug.Log("No navigation mesh found.");
+        // } else {
+        //     //get min spacing
+        //     Vector2[] terrainRanges = GetTerrainRanges();
+        //     navMesh.SetGridSize(GetMinSpacing(terrainRanges[0], terrainRanges[1]));
+        //     navMesh.Setup();
+        // }
+
+        //wait for a little bit to spawn the agents
+        IEnumerator WaitAndSpawnAgents() {
+            yield return new WaitForSeconds(0.1f);
+            SpawnAgents();
+        }
+        StartCoroutine(WaitAndSpawnAgents());
+
     }
 
     void Update()
@@ -199,7 +235,7 @@ public class AgentManager : MonoBehaviour
             Debug.Log("No navigation mesh found.");
         }
         if (navMesh != null) {
-            navMesh.OccupyCells(humans);
+            navMesh.OccupyCells(global_agents);
         }
     }
 
@@ -308,6 +344,14 @@ private void ClearAgents() {
             // Clean up when returning to edit mode, if necessary.
             ClearAgents();
         }
+
+        // clear agents when entering play mode aswell
+        if (state == UnityEditor.PlayModeStateChange.EnteredPlayMode)
+        {
+            // Clean up when returning to edit mode, if necessary.
+            ClearAgents();
+        }
+
     }
     #endif
 

@@ -21,11 +21,23 @@ public class Human : MonoBehaviour
     private void Update()
     {
         //move towards goal
+        // if the goal is not enabled then return
+        //get goal component
+        Goal goalComponent = goal.GetComponent<Goal>();
+        //if goal component in play is false then return
+        if (!goalComponent.inPlay) {
+            return;
+        }
+
         Vector3 goalPos = goal.transform.position;
         Vector3 direction = goalPos - transform.position;
         direction.y = 0;
         direction.Normalize();
-        transform.position += direction * speed * Time.deltaTime;
+        //use rigid body velocity to move
+        // make sure to only set the velocity in the x and z directions
+        // need to leave the y velocity alone
+        GetComponent<Rigidbody>().velocity = direction * speed;
+
     }
 
 
