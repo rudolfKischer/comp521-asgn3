@@ -7,6 +7,7 @@ using Vector3 = UnityEngine.Vector3;
 
 
 
+
 public class AgentManager : MonoBehaviour
 {
     //Want to have a list of agents
@@ -43,9 +44,12 @@ public class AgentManager : MonoBehaviour
 
 
 
-    [SerializeField, Range(5, 100)]
+    [SerializeField, Range(1, 300)]
     private int numHumans = 5;
-    [SerializeField, Range(5, 100)]
+    [SerializeField]
+    private bool lockChairMovement = true;
+
+    [SerializeField, Range(1, 300)]
     private int numChairs = 10;          
     [SerializeField, Range(0.001f, 1.0f)]
     private float gridSparsity = 1.0f;
@@ -60,6 +64,18 @@ public class AgentManager : MonoBehaviour
     // Navigation Terrain
     [SerializeField]
     private GameObject navigationTerrain;
+    private GridNavMesh navMesh;
+
+    [SerializeField]
+    private bool lockNavMesh = true;
+    [SerializeField, Range(0.001f, 1.0f)]
+    private float navResolution = 0.1f;
+
+    [SerializeField]
+    private bool humanObstacles = true;
+
+
+
 
 
     private List<GameObject> humans;
@@ -203,6 +219,13 @@ public class AgentManager : MonoBehaviour
             SetHumanSpeed(humans[i]);
         }
         chairs = InstatiateAgents(chairPrefab, numChairs);
+        if (lockChairMovement) {
+            //lock rigid body
+            for (int i = 0; i < chairs.Count; i++) {
+                Rigidbody rigidBody = chairs[i].GetComponent<Rigidbody>();
+                rigidBody.constraints = RigidbodyConstraints.FreezeAll;
+            }
+        }
 
         // distibute humans and chairs over the area of the terrain
         // assume the terrain is a axis aligned cube with any dimensions
@@ -219,6 +242,9 @@ public class AgentManager : MonoBehaviour
             chairs[i].transform.localScale = min_spaceing * Vector3.one;
         }
 
+        //shrink the goal aswell
+        goalObject.transform.localScale = min_spaceing * Vector3.one;
+
         GridAgentDistribution(global_agents, terrainZRange, terrainXRange, new Vector2(gridSpacing, gridSpacing));
 
         
@@ -226,19 +252,105 @@ public class AgentManager : MonoBehaviour
     }
 
 
+    public void SetPathHuman(GameObject human) {
+      Vector3 start = human.transform.position;
+      Vector3 end = human.GetComponent<Human>().goal.transform.position;
+      int startIndex = navMesh.GetPointIndex(start);
+      int endIndex = navMesh.GetPointIndex(end);
+      startIndex = navMesh.GetClosestUnoccupied(startIndex);
+      endIndex = navMesh.GetClosestUnoccupied(endIndex);
+      if (startIndex == -1) {
+          Debug.Log("No unoccupied point found.");
+          human.GetComponent<Human>().SetPath(new List<Vector3>());
+          return ;
+      }
+
+      // get the path from the A* solver
+      AStarSolver solver = AStarSolver.Instance;
+      List<int> path = solver.Solve(startIndex, endIndex);
+
+      // convert the path from a list of indices to a list of points
+      List<Vector3> pathPoints = new List<Vector3>();
+      foreach (int index in path) {
+          pathPoints.Add(navMesh.GetPoint(index));
+      }
+      pathPoints.Add(end);
+
+      // set the path of the human
+      human.GetComponent<Human>().SetPath(pathPoints);
+    }
+
+    public void SetHumanPaths() {
+        for (int i = 0; i < humans.Count; i++) {
+            Human humanComponent = humans[i].GetComponent<Human>();
+            if (humanComponent.dirtyPath) {
+                SetPathHuman(humans[i]);
+                humanComponent.dirtyPath = false;
+            }
+        }
+    }
+
+    public void SetSolverGraph() {
+        AStarSolver solver = AStarSolver.Instance;
+        if (solver == null) {
+          Debug.Log("No A* solver found.");
+          return;
+        }
+        List<int>[] edges = navMesh.GetReducedEdges();
+        Vector3[] points = navMesh.GetPoints();
+        solver.SetGraph(points, edges);
+    }
+
+    public void MarkPathedCells(List<Vector3> path) {
+        List<int> pathIndices = new List<int>();
+        foreach (Vector3 point in path) {
+            pathIndices.Add(navMesh.GetPointIndex(point));
+        }
+        navMesh.MarkPathedCells(pathIndices);
+    }
+
+    public void MarkAllHumansPaths() {
+        navMesh.ClearPathedCells();
+        for (int i = 0; i < humans.Count; i++) {
+            //Mark pathed cells from human path
+            Human humanComponent = humans[i].GetComponent<Human>();
+            List<Vector3> path = humanComponent.GetPath();
+            if (path != null && path.Count > 0) {
+                MarkPathedCells(path);
+            }
+        }
+    }
+
+
     // every update, we need to update which cells are occupied
 
     void Start()
     {
-        // GridNavMesh navMesh = navigationTerrain.GetComponent<GridNavMesh>();
-        // if (navMesh == null) {
-        //     Debug.Log("No navigation mesh found.");
-        // } else {
-        //     //get min spacing
-        //     Vector2[] terrainRanges = GetTerrainRanges();
-        //     navMesh.SetGridSize(GetMinSpacing(terrainRanges[0], terrainRanges[1]));
-        //     navMesh.Setup();
-        // }
+        humans = new List<GameObject>();
+        chairs = new List<GameObject>();
+
+
+        this.navMesh =  navigationTerrain.GetComponent<GridNavMesh>();
+        if (navMesh == null) {
+            Debug.Log("No navigation mesh found.");
+            return;
+
+        }
+        //get min spacing
+        Vector2[] terrainRanges = GetTerrainRanges();
+        if (lockNavMesh) {
+            navMesh.SetGridSize(GetMinSpacing(terrainRanges[0], terrainRanges[1]) * (1 - navResolution));
+        }
+        navMesh.Setup();
+
+        //set the solver graph
+        navMesh.ClearOccupiedCells();
+        navMesh.OccupyCells(global_agents);
+        SetSolverGraph();
+        SetHumanPaths();
+        MarkAllHumansPaths();
+
+        //set the nav collision bound to hald the width of a human
 
         //wait for a little bit to spawn the agents
         IEnumerator WaitAndSpawnAgents() {
@@ -247,17 +359,44 @@ public class AgentManager : MonoBehaviour
         }
         StartCoroutine(WaitAndSpawnAgents());
 
+
+
     }
 
     void Update()
-    {
-        GridNavMesh navMesh = navigationTerrain.GetComponent<GridNavMesh>();
-        if (navMesh == null) {
-            Debug.Log("No navigation mesh found.");
+    { 
+        if (!goalObject.GetComponent<Goal>().inPlay) {
+            for (int i = 0; i < humans.Count; i++) {
+                humans[i].GetComponent<Human>().SetPath(new List<Vector3>());
+            }
+            // freexe their velocity
+            for (int i = 0; i < global_agents.Count; i++) {
+                Rigidbody rigidBody = global_agents[i].GetComponent<Rigidbody>();
+                rigidBody.velocity = Vector3.zero;
+            }
+            return;
         }
-        if (navMesh != null) {
+        // 
+        if (humans.Count != 0) {
+            //set bound to half width of human
+            // use human collider
+            Collider humanCollider = humans[0].GetComponent<Collider>();
+            if (humanCollider != null) {
+                navMesh.navCollisionBound = 0.25f * humanCollider.bounds.size.x;
+            }
+        }
+        navMesh.ClearOccupiedCells();
+        navMesh.OccupyCells(chairs);
+        if (humanObstacles) {
             navMesh.OccupyCells(global_agents);
         }
+        SetSolverGraph();
+        SetHumanPaths();
+        MarkAllHumansPaths();
+
+        // if the goal is not in play
+        // clear the players paths
+
     }
 
     //need to to clear agents on when we exit play mode

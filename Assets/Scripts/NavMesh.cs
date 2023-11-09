@@ -24,6 +24,7 @@ public class NavMesh<T> : MonoBehaviour
     public List<int>[] GetEdges() { return edges; }
     public void SetPoints(T[] points) { this.points = points; }
     public void SetEdges(List<int>[] edges) { this.edges = edges; }
+    public T GetPoint(int index) { return points[index]; }
 
     public void AddEdge(Vector2 edge) {
         // add edge to both points

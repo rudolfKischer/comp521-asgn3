@@ -26,6 +26,10 @@ public class GridNavMesh : NavMesh<Vector3>
   //need to keep track of if a cell is occupied
   [SerializeField]
   private bool[] occupiedCells;
+  
+  private bool[] pathedCells;
+
+  public float navCollisionBound = 0.0f;
 
   private int PointIndex(int x, int z) {
     return (int)(x + z * numOfPointsX);
@@ -38,7 +42,23 @@ public class GridNavMesh : NavMesh<Vector3>
   }
 
 
+  public void MarkPathedCells(List<int> path) {
+    foreach (int index in path) {
+      pathedCells[index] = true;
+    }
+  }
 
+  public void ClearPathedCells() {
+    for (int i = 0; i < pathedCells.Length; i++) {
+      pathedCells[i] = false;
+    }
+  }
+
+  public void ClearOccupiedCells() {
+    for (int i = 0; i < occupiedCells.Length; i++) {
+      occupiedCells[i] = false;
+    }
+  }
 
 
   private Vector2 GetXRange() {
@@ -144,7 +164,7 @@ public class GridNavMesh : NavMesh<Vector3>
   //Given a point, we need to be able to get the index of the point that it maps to
   //on the grid
   //if the point is outside of the grid, return -1
-  private int GetPointIndex(Vector3 point) {
+  public int GetPointIndex(Vector3 point) {
     // use the collider to get the bounds of the object
     Collider collider = GetComponent<Collider>();
     float minX = collider.bounds.min.x;
@@ -175,22 +195,40 @@ public class GridNavMesh : NavMesh<Vector3>
     }
   }
 
-  //given a list GameObjects, we want to mark the cells that they are in as occupied, using their transform
-  public void OccupyCells(List<GameObject> objects) {
-    // clear occupied cells
-    for (int i = 0; i < occupiedCells.Length; i++) {
-      occupiedCells[i] = false;
+  public void UnOccupyCell(Vector3 point) {
+    int index = GetPointIndex(point);
+    if (index != -1) {
+      occupiedCells[index] = false;
+    } else {
+      Debug.LogWarning("Point " + point + " is outside of the grid.");
     }
-    foreach (GameObject obj in objects) {
+  }
+
+  public void OccupyCells(GameObject obj) {
+
       //do it for each point in the axis aligned bounding box of the objects collider
       Collider collider = obj.GetComponent<Collider>();
       if (collider == null) {
         Debug.LogWarning("Object " + obj + " does not have a collider.");
-        continue;
+        return ;
       }
       // we want the 2 corner points of the collider
       Vector3 minBound = collider.bounds.min;
       Vector3 maxBound = collider.bounds.max;
+
+
+      // we want every to hadd halfe the width to the bound on both sides
+      // if the game object is not a human add bigger boundaris
+      // human if they have human compoannet
+      if (obj.GetComponent<Human>() == null) {
+        minBound.x -= navCollisionBound;
+        minBound.z -= navCollisionBound;
+        maxBound.x += navCollisionBound;
+        maxBound.z += navCollisionBound;
+      }
+
+
+
 
       // we want to convert these corner points to indices
       // then because these are axis aligned
@@ -210,8 +248,75 @@ public class GridNavMesh : NavMesh<Vector3>
           }
         }
       }
+
+  }
+
+  //given a list GameObjects, we want to mark the cells that they are in as occupied, using their transform
+  public void OccupyCells(List<GameObject> objects) {
+    // clear occupied cells
+    for (int i = 0; i < occupiedCells.Length; i++) {
+      occupiedCells[i] = false;
+    }
+    if (objects == null) {
+      return;
+    }
+
+    foreach (GameObject obj in objects) {
+      OccupyCells(obj);
+
     }
   }
+
+  // give the reduced graph, that is the graph, but without the occupied cells
+
+  public List<int>[] GetReducedEdges() {
+    // we want to remove the edges that are connected to occupied cells
+    // we also want to remove the occupied cells from the graph
+    // we want to return the reduced graph
+    // we can actually keep the same points, but we need to remove the edges that are connected to occupied cells
+    // we can do this by creating a new list of edges, and only adding the edges that are not connected to occupied cells
+    List<int>[] reducedEdges = new List<int>[edges.Length];
+
+    // Maybe theres a faster way to do this
+    for (int i = 0; i < edges.Length; i++) {
+      reducedEdges[i] = new List<int>();
+      for (int j = 0; j < edges[i].Count; j++) {
+        if (!occupiedCells[edges[i][j]]) {
+          reducedEdges[i].Add(edges[i][j]);
+        }
+      }
+    }
+
+    return reducedEdges;
+  }
+
+  public int GetClosestUnoccupied(int i) {
+      // we want  to do a bread first search to find the closest unoccupied cell
+      // we want to return the index of that cell
+      List<int> queue = new List<int>();
+      bool[] visited = new bool[points.Length];
+      queue.Add(i);
+      visited[i] = true;
+      while (queue.Count > 0) {
+          int current = queue[0];
+          queue.RemoveAt(0);
+          if (!occupiedCells[current]) {
+              return current;
+          }
+          for (int j = 0; j < edges[current].Count; j++) {
+              if (!visited[edges[current][j]]) {
+                  queue.Add(edges[current][j]);
+                  visited[edges[current][j]] = true;
+              }
+          }
+      }
+
+      return -1;
+
+
+  }
+
+
   
   public void SetNumPoints(int x, int z) {
     numOfPointsX = x;
@@ -238,6 +343,10 @@ public class GridNavMesh : NavMesh<Vector3>
     CreateEdges();
     if (occupiedCells == null || occupiedCells.Length != points.Length) {
       occupiedCells = new bool[points.Length];
+    }
+
+    if (pathedCells == null || pathedCells.Length != points.Length) {
+      pathedCells = new bool[points.Length];
     }
   }
 
@@ -283,6 +392,9 @@ public class GridNavMesh : NavMesh<Vector3>
       Gizmos.color = Color.white;
       if (occupiedCells[i]) {
         Gizmos.color = Color.red;
+      }
+      if (pathedCells[i]) {
+        Gizmos.color = Color.green;
       }
       Vector3 point = this.points[i];
       Gizmos.DrawCube(point, new Vector3(GetXStep(), 0.01f, GetZStep()));
