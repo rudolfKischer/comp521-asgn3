@@ -54,6 +54,10 @@ public class AgentManager : MonoBehaviour
     [SerializeField]
     private bool displayGrid = true;
 
+    // Navigation Terrain
+    [SerializeField]
+    private GameObject navigationTerrain;
+
     private List<GameObject> humans;
     private List<GameObject> chairs;
     private List<GameObject> global_agents = new List<GameObject>();
@@ -180,6 +184,25 @@ public class AgentManager : MonoBehaviour
 
     }
 
+
+    // every update, we need to update which cells are occupied
+
+    void Start()
+    {
+        SpawnAgents();
+    }
+
+    void Update()
+    {
+        GridNavMesh navMesh = navigationTerrain.GetComponent<GridNavMesh>();
+        if (navMesh == null) {
+            Debug.Log("No navigation mesh found.");
+        }
+        if (navMesh != null) {
+            navMesh.OccupyCells(humans);
+        }
+    }
+
     //need to to clear agents on when we exit play mode
 
 
@@ -189,6 +212,23 @@ public class AgentManager : MonoBehaviour
     }
 
 private void ClearAgents() {
+    for (int i = transform.childCount - 1; i >= 0; --i)
+    {
+        GameObject child = transform.GetChild(i).gameObject;
+        // if the child is an agent has tag 'Agent' destroy it
+        if (child.CompareTag("Agent"))
+        {
+            if (UnityEditor.EditorApplication.isPlaying)
+            {
+                Destroy(child.gameObject);
+            }
+            else
+            {
+                DestroyImmediate(child.gameObject);
+            }
+        }
+
+    }
     foreach (var agent in global_agents) {
         if (agent != null) {
 #if UNITY_EDITOR
@@ -253,23 +293,6 @@ private void ClearAgents() {
       {
         UnityEditor.Undo.RecordObject(this, "AgentManager Validation");
         //destroy all children aswell
-        for (int i = transform.childCount - 1; i >= 0; --i)
-        {
-            GameObject child = transform.GetChild(i).gameObject;
-            // if the child is an agent has tag 'Agent' destroy it
-            if (child.CompareTag("Agent"))
-            {
-                if (UnityEditor.EditorApplication.isPlaying)
-                {
-                    Destroy(child.gameObject);
-                }
-                else
-                {
-                    DestroyImmediate(child.gameObject);
-                }
-            }
-
-        }
 
         SpawnAgents();
         UnityEditor.EditorUtility.SetDirty(this);

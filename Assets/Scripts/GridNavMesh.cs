@@ -20,40 +20,58 @@ public class GridNavMesh : NavMesh<Vector3>
   private bool displayGridPoints = true;
   [SerializeField]
   private bool displayGridEdges = true;
+  [SerializeField]
+  private bool displayGridTiles = true;
 
-  //need to keep track of 
-
-
+  //need to keep track of if a cell is occupied
+  [SerializeField]
+  private bool[] occupiedCells;
 
   private int PointIndex(int x, int z) {
     return (int)(x + z * numOfPointsX);
   }
 
 
-  private void CreatePoints() {
-    // get edge points of the object
-    allEdges.Clear();
+
+  private Vector2 GetXRange() {
     Collider collider = GetComponent<Collider>();
     float minX = collider.bounds.min.x;
     float maxX = collider.bounds.max.x;
+    float diff = maxX - minX;
+    float step = diff / (numOfPointsX + 1) * 0.5f;
+    float newMinX = minX + step;
+    float newMaxX = maxX - step;
+    return new Vector2(newMinX, newMaxX);
+  }
+
+  private Vector2 GetZRange() {
+    Collider collider = GetComponent<Collider>();
     float minZ = collider.bounds.min.z;
     float maxZ = collider.bounds.max.z;
+    float diff = maxZ - minZ;
+    float step = diff / (numOfPointsZ + 1) * 0.5f;
+    float newMinZ = minZ + step;
+    float newMaxZ = maxZ - step;
+    return new Vector2(newMinZ, newMaxZ);
+  }
 
-    //There should always be points on each end of the bound
-    float xStep = (maxX - minX) / (numOfPointsX - 1);
-    float zStep = (maxZ - minZ) / (numOfPointsZ - 1);
+  private float GetXStep() {
+    Vector2 xRange = GetXRange();
+    float minX = xRange.x;
+    float maxX = xRange.y;
+    return (maxX - minX) / (numOfPointsX - 1);
+  }
 
-    //add points to the nav mesh, need to convert to single array
-    points = new Vector3[numOfPointsX * numOfPointsZ];
-    for (int z = 0; z < numOfPointsZ; z++) {
-      for (int x = 0; x < numOfPointsX; x++) {
-        points[PointIndex(x, z)] = new Vector3(x * xStep + minX, 0, z * zStep + minZ);
-      }
-    }
-    //note that the index of each grid point , index = x + z * numOfPointsX
-    // so the index of the point at (x,z) is x + z * numOfPointsX
+  private float GetZStep() {
+    Vector2 zRange = GetZRange();
+    float minZ = zRange.x;
+    float maxZ = zRange.y;
+    return (maxZ - minZ) / (numOfPointsZ - 1);
+  }
 
-    // create edges
+  private void CreateEdges() {
+    allEdges.Clear();
+
     SetEdges(new List<int>[numOfPointsX * numOfPointsZ]);
     for (int i = 0; i < numOfPointsX * numOfPointsZ; i++) {
       edges[i] = new List<int>();
@@ -87,13 +105,92 @@ public class GridNavMesh : NavMesh<Vector3>
         AddEdge(new Vector2(PointIndex(x + 1, z), PointIndex(x, z + 1)));
       }
     }
+    
+  }
 
+
+  private void CreatePoints() {
+    // get edge points of the object
+    Vector2 xRange = GetXRange();
+    Vector2 zRange = GetZRange();
+    float minX = xRange.x;
+    float maxX = xRange.y;
+    float minZ = zRange.x;
+    float maxZ = zRange.y;
+
+    //There should always be points on each end of the bound
+    float xStep = GetXStep();
+    float zStep = GetZStep();
+
+    //add points to the nav mesh, need to convert to single array
+    points = new Vector3[numOfPointsX * numOfPointsZ];
+    for (int z = 0; z < numOfPointsZ; z++) {
+      for (int x = 0; x < numOfPointsX; x++) {
+        points[PointIndex(x, z)] = new Vector3(minX + x * xStep, 0, minZ + z * zStep);
+      }
+    }
+    //note that the index of each grid point , index = x + z * numOfPointsX
+    // so the index of the point at (x,z) is x + z * numOfPointsX
+  }
+
+  //Given a point, we need to be able to get the index of the point that it maps to
+  //on the grid
+  //if the point is outside of the grid, return -1
+  private int GetPointIndex(Vector3 point) {
+    // use the collider to get the bounds of the object
+    Collider collider = GetComponent<Collider>();
+    float minX = collider.bounds.min.x;
+    float maxX = collider.bounds.max.x;
+    float minZ = collider.bounds.min.z;
+    float maxZ = collider.bounds.max.z;
+
+    //check if point is outside of the grid
+    if (point.x < minX || point.x > maxX || point.z < minZ || point.z > maxZ) {
+      return -1;
+    }
+
+    //get the index of the point
+    float xStep = GetXStep();
+    float zStep = GetZStep();
+    int x = (int)((point.x - minX) / xStep);
+    int z = (int)((point.z - minZ) / zStep);
+    return PointIndex(x, z);
+  }
+
+  //Given a point, we want to mark that cell as occupied
+  public void OccupyCell(Vector3 point) {
+    int index = GetPointIndex(point);
+    if (index != -1) {
+      occupiedCells[index] = true;
+    } else {
+      Debug.LogWarning("Point " + point + " is outside of the grid.");
+    }
+  }
+
+  //given a list GameObjects, we want to mark the cells that they are in as occupied, using their transform
+  public void OccupyCells(List<GameObject> objects) {
+    // clear occupied cells
+    for (int i = 0; i < occupiedCells.Length; i++) {
+      occupiedCells[i] = false;
+    }
+    foreach (GameObject obj in objects) {
+      OccupyCell(obj.transform.position);
+    }
+  }
+  
+
+  void Setup() {
+    //create the points
+    CreatePoints();
+    CreateEdges();
+    if (occupiedCells == null || occupiedCells.Length != points.Length) {
+      occupiedCells = new bool[points.Length];
+    }
   }
 
   void Start()
   {
-    //create the points
-    CreatePoints();
+    Setup();
   }
 
   # if UNITY_EDITOR
@@ -104,7 +201,7 @@ public class GridNavMesh : NavMesh<Vector3>
     if (linkNumZtoX) {
       numOfPointsZ = numOfPointsX;
     }
-    CreatePoints();
+    Setup();
   }
 
   #endif
@@ -127,6 +224,24 @@ public class GridNavMesh : NavMesh<Vector3>
     }
   }
 
+  void DrawTiles() {
+    //draw very thin gzmos cube for tiles, centered on each point, that is the size of the tile
+    for (int i = 0; i < this.points.Length; i++) {
+      Gizmos.color = Color.white;
+      if (occupiedCells[i]) {
+        Gizmos.color = Color.red;
+      }
+      Vector3 point = this.points[i];
+      Gizmos.DrawCube(point, new Vector3(GetXStep(), 0.01f, GetZStep()));
+      //draw outline of this cube
+      Gizmos.color = Color.black;
+      Gizmos.DrawLine(point + new Vector3(-GetXStep() / 2.0f, 0, -GetZStep() / 2.0f), point + new Vector3(GetXStep() / 2.0f, 0, -GetZStep() / 2.0f));
+      Gizmos.DrawLine(point + new Vector3(GetXStep() / 2.0f, 0, -GetZStep() / 2.0f), point + new Vector3(GetXStep() / 2.0f, 0, GetZStep() / 2.0f));
+      Gizmos.DrawLine(point + new Vector3(GetXStep() / 2.0f, 0, GetZStep() / 2.0f), point + new Vector3(-GetXStep() / 2.0f, 0, GetZStep() / 2.0f));
+      Gizmos.DrawLine(point + new Vector3(-GetXStep() / 2.0f, 0, GetZStep() / 2.0f), point + new Vector3(-GetXStep() / 2.0f, 0, -GetZStep() / 2.0f));
+    }
+  }
+
 
   void OnDrawGizmos()
   {
@@ -140,5 +255,13 @@ public class GridNavMesh : NavMesh<Vector3>
     if (this.edges != null && displayGridEdges) {
       DrawGridLines();
     }
+
+    
+    //draw very thin gzmos cube for tiles, centered on each point, that is the size of the tile
+    if (this.points != null && displayGridTiles) {
+      DrawTiles();
+    }
+    
+
   }
 }
