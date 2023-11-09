@@ -50,6 +50,9 @@ public class PathingTerrain : MonoBehaviour
             walls[i].transform.position = new Vector3(dimensions.x / 2.0f, 0, 0);
             walls[i].transform.localRotation = Quaternion.identity;
             walls[i].transform.RotateAround(transform.position, Vector3.up, rotation);
+            // disable renderer 
+            Renderer renderer = walls[i].GetComponent<Renderer>();
+            renderer.enabled = false;
             //face the correct direction
             rotation += 90;
         }

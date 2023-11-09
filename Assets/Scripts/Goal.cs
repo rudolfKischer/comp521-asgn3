@@ -19,6 +19,7 @@ public class Goal : MonoBehaviour
 
     private float timeSinceDespawn = 0.0f;
 
+    [SerializeField]
     private float spawnHeight = 1.0f;
 
     private void Respawn() {

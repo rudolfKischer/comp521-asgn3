@@ -204,7 +204,10 @@ public class GridNavMesh : NavMesh<Vector3>
 
       for (int z = (int)minCoords.y; z <= (int)maxCoords.y; z++) {
         for (int x = (int)minCoords.x; x <= (int)maxCoords.x; x++) {
-          occupiedCells[PointIndex(x, z)] = true;
+          int occupiedIndex = PointIndex(x, z);
+          if (occupiedIndex >= 0 && occupiedIndex < occupiedCells.Length) {
+            occupiedCells[occupiedIndex] = true;
+          }
         }
       }
     }

@@ -54,13 +54,13 @@ public class AgentManager : MonoBehaviour
     [SerializeField]
     private bool displayGrid = true;
 
+    [SerializeField]
+    private float humanTimeToCrossTerrain = 10.0f;
+
     // Navigation Terrain
     [SerializeField]
     private GameObject navigationTerrain;
 
-    //Goal object
-    [SerializeField]
-    private GameObject goal;
 
     private List<GameObject> humans;
     private List<GameObject> chairs;
@@ -172,6 +172,23 @@ public class AgentManager : MonoBehaviour
 
     }
 
+    private void SetHumanSpeed(GameObject human) {
+        //we want to set the speed, so that the human takes 10 seconds to cross the terrain
+        //get the dimensions of the terrain
+        Vector3 terrainDimensions = terrainObject.transform.lossyScale;
+        //get the x and z components of the terrain dimensions
+        float terrainX = terrainDimensions.x;
+        float terrainZ = terrainDimensions.z;
+        //get the x and z components of the human colliders aabb bounds
+        Collider humanCollider = human.GetComponent<Collider>();
+        Vector3 humanBounds = humanCollider.bounds.size;
+        float humanX = humanBounds.x;
+        float humanZ = humanBounds.z;
+        //set the speed of the human so that it takes 10 seconds to cross the terrain
+        float speed = (terrainX + terrainZ) / (humanTimeToCrossTerrain * (humanX + humanZ));
+        human.GetComponent<Human>().speed = speed;
+    }
+
     void SpawnAgents() {
         ClearAgents();
 
@@ -179,7 +196,11 @@ public class AgentManager : MonoBehaviour
 
         humans = InstatiateAgents(humanPrefab, numHumans);
         for (int i = 0; i < humans.Count; i++) {
-            humans[i].GetComponent<Human>().goal = goalObject;
+            Human humanComponent = humans[i].GetComponent<Human>();
+            humanComponent.goal = goalObject;
+            //we want to set the speed, so that the human takes 10 seconds to cross the terrain
+            //get the dimensions of the terrain
+            SetHumanSpeed(humans[i]);
         }
         chairs = InstatiateAgents(chairPrefab, numChairs);
 
