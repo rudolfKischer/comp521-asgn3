@@ -11,7 +11,7 @@ public class Agent : MonoBehaviour
 
     public bool dirtyPath = true;
 
-    private float stalePathTime = 2.0f;
+    private float stalePathTime = 0.1f;
     private float stalePathTimer = 0.0f;
 
 
@@ -64,8 +64,8 @@ public class Agent : MonoBehaviour
         if (stalePathTimer > stalePathTime)
         {
             stalePathTimer = 0.0f;
-            float minStaleTime = 0.2f;
-            float maxStaleTime = 0.3f;
+            float minStaleTime = 0.1f;
+            float maxStaleTime = 0.2f;
             stalePathTime = Random.Range(minStaleTime, maxStaleTime);
             dirtyPath = true;
         }

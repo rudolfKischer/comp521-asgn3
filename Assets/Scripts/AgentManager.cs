@@ -5,6 +5,7 @@ using Random = UnityEngine.Random;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 
 
@@ -44,12 +45,12 @@ public class AgentManager : MonoBehaviour
 
 
 
-    [SerializeField, Range(1, 300)]
+    [SerializeField, Range(1, 500)]
     private int numHumans = 5;
     [SerializeField]
     private bool lockChairMovement = true;
 
-    [SerializeField, Range(1, 300)]
+    [SerializeField, Range(1, 500)]
     private int numChairs = 10;          
     [SerializeField, Range(0.001f, 1.0f)]
     private float gridSparsity = 1.0f;
@@ -73,6 +74,15 @@ public class AgentManager : MonoBehaviour
 
     [SerializeField]
     private bool humanObstacles = true;
+
+    private float averageExecutionTime = 0.0f;
+    private float averageExecutionTimeCount = 0.0f;
+
+    private float averageTimeToReachGoal = 0.0f;
+    private float averageTimeToReachGoalCount = 0.0f;
+    private bool goalReached = false;
+    private bool goalSpawned = false;
+    private float goalReachedTimer = 0.0f;
 
 
 
@@ -433,7 +443,43 @@ public class AgentManager : MonoBehaviour
 
 
     void Update()
-    { 
+    {   
+
+
+        // current time right now
+        Stopwatch stopwatch = new Stopwatch();
+
+        if (goalSpawned) {
+            goalReachedTimer += Time.deltaTime;
+        }
+
+        // we need to figure out if the has spawn
+        // if it has we need to start a timer
+        if (goalObject.GetComponent<Goal>().inPlay && !goalSpawned) {
+            goalSpawned = true;
+        }
+
+        // if the goal is not in play we need to stop the timer if its on
+        if (!goalObject.GetComponent<Goal>().inPlay && goalSpawned) {
+            goalSpawned = false;
+            float timeToReachGoal = goalReachedTimer;
+            averageTimeToReachGoal = (averageTimeToReachGoal * averageTimeToReachGoalCount + timeToReachGoal) / (averageTimeToReachGoalCount + 1.0f);
+            averageTimeToReachGoalCount += 1.0f;
+
+
+            //show the current average time of execution and the average time to reach the goal
+            // we also want to show how many iterations of the average we have done for both
+            //display it all conscisely in one line
+            //display execution time in scientific notation
+            // Debug.Log("Average execution time: " + averageExecutionTime.ToString("E4") + " (" + averageExecutionTimeCount + " iterations) | Average time to reach goal: " + averageTimeToReachGoal.ToString("F2") + " (" + averageTimeToReachGoalCount + " iterations)");
+
+            goalReachedTimer = 0.0f;
+
+        }
+
+
+
+        stopwatch.Start();
         if (!goalObject.GetComponent<Goal>().inPlay) {
             for (int i = 0; i < humans.Count; i++) {
                 humans[i].GetComponent<Human>().SetPath(new List<Vector3>());
@@ -496,6 +542,21 @@ public class AgentManager : MonoBehaviour
 
         // if the goal is not in play
         // clear the players paths
+
+        stopwatch.Stop();
+
+        // only sample 2% of the time
+        if (Random.Range(0, 2) == 0) {
+          if (averageExecutionTimeCount == 0.0f) {
+            averageExecutionTime = stopwatch.ElapsedMilliseconds / 1000.0f;
+          } else {
+            averageExecutionTime = (averageExecutionTime * averageExecutionTimeCount + stopwatch.ElapsedMilliseconds / 1000.0f) / (averageExecutionTimeCount + 1.0f);
+          }
+          averageExecutionTimeCount += 1.0f;
+        }
+
+
+
 
     }
 
