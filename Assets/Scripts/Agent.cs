@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Human : MonoBehaviour
+public class Agent : MonoBehaviour
 {
     [SerializeField]
     public GameObject goal;
@@ -11,7 +11,7 @@ public class Human : MonoBehaviour
 
     public bool dirtyPath = true;
 
-    private float stalePathTime = 0.3f;
+    private float stalePathTime = 2.0f;
     private float stalePathTimer = 0.0f;
 
 
@@ -36,9 +36,6 @@ public class Human : MonoBehaviour
 
     private void Start()
     {
-        // set
-        
-
         //set goal to a random point on the nav mesh
 
     }
@@ -67,8 +64,8 @@ public class Human : MonoBehaviour
         if (stalePathTimer > stalePathTime)
         {
             stalePathTimer = 0.0f;
-            float minStaleTime = 0.3f;
-            float maxStaleTime = 0.8f;
+            float minStaleTime = 0.2f;
+            float maxStaleTime = 0.3f;
             stalePathTime = Random.Range(minStaleTime, maxStaleTime);
             dirtyPath = true;
         }
@@ -107,19 +104,19 @@ public class Human : MonoBehaviour
         Vector3 direction = closestPoint - transform.position;
         direction.y = 0;
         direction.Normalize();
-        GetComponent<Rigidbody>().velocity = direction * speed;
+        Rigidbody rb = GetComponent<Rigidbody>();
+        rb.velocity = direction * speed;
 
-        // point in the direction of movement
-        transform.LookAt(transform.position + direction);
-
-
-
-
+        // give angular velocity to face the direction of movement
+        Vector3 angularVelocity = Vector3.Cross(transform.forward, -direction);
+        rb.angularVelocity = angularVelocity * 30.0f;
 
 
-        
 
-        if (closestDistance < minDistance && closestIndex < path.Count - 1)
+
+
+
+        if (closestDistance < minDistance && closestIndex < path.Count)
         {
             path.RemoveAt(closestIndex);
         }

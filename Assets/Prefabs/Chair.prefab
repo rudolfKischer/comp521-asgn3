@@ -118,6 +118,7 @@ GameObject:
   - component: {fileID: 568971768273035175}
   - component: {fileID: 596667409656652949}
   - component: {fileID: 2687798446182352795}
+  - component: {fileID: 6232117888675483973}
   m_Layer: 0
   m_Name: Chair
   m_TagString: Agent
@@ -241,8 +242,23 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 0
-  m_Constraints: 112
+  m_Constraints: 84
   m_CollisionDetection: 0
+--- !u!114 &6232117888675483973
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2957079433238947295}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9d1ae2679fcd4ce29decc0a0bd3164f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  goal: {fileID: 0}
+  speed: 2.76
+  dirtyPath: 1
 --- !u!1 &3628136528065665789
 GameObject:
   m_ObjectHideFlags: 0

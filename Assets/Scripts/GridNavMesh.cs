@@ -205,6 +205,10 @@ public class GridNavMesh : NavMesh<Vector3>
   }
 
   public void OccupyCells(GameObject obj) {
+    OccupyCells(obj, navCollisionBound);
+  }
+
+  public void OccupyCells(GameObject obj, float boundDist) {
 
       //do it for each point in the axis aligned bounding box of the objects collider
       Collider collider = obj.GetComponent<Collider>();
@@ -220,15 +224,10 @@ public class GridNavMesh : NavMesh<Vector3>
       // we want every to hadd halfe the width to the bound on both sides
       // if the game object is not a human add bigger boundaris
       // human if they have human compoannet
-      if (obj.GetComponent<Human>() == null) {
-        minBound.x -= navCollisionBound;
-        minBound.z -= navCollisionBound;
-        maxBound.x += navCollisionBound;
-        maxBound.z += navCollisionBound;
-      }
-
-
-
+      minBound.x -= boundDist;
+      minBound.z -= boundDist;
+      maxBound.x += boundDist;
+      maxBound.z += boundDist;
 
       // we want to convert these corner points to indices
       // then because these are axis aligned
@@ -254,15 +253,24 @@ public class GridNavMesh : NavMesh<Vector3>
   //given a list GameObjects, we want to mark the cells that they are in as occupied, using their transform
   public void OccupyCells(List<GameObject> objects) {
     // clear occupied cells
-    for (int i = 0; i < occupiedCells.Length; i++) {
-      occupiedCells[i] = false;
-    }
     if (objects == null) {
       return;
     }
 
     foreach (GameObject obj in objects) {
       OccupyCells(obj);
+
+    }
+  }
+
+  public void OccupyCells(List<GameObject> objects, float boundDist) {
+    // clear occupied cells
+    if (objects == null) {
+      return;
+    }
+
+    foreach (GameObject obj in objects) {
+      OccupyCells(obj, boundDist);
 
     }
   }
@@ -312,6 +320,39 @@ public class GridNavMesh : NavMesh<Vector3>
       }
 
       return -1;
+  }
+
+  public int GetClosestUnoccupiedTowardsPoint(int i, Vector3 point) {
+    // we want to look for unoccupied cells , but we want to do in in a direction towards a point
+    // we want to return the index of that cell
+    PriorityQueue<int, float> queue = new PriorityQueue<int, float>();
+    bool[] visited = new bool[points.Length];
+    // to get the distance to a point, we take the index we are looking at and get the point at that index
+    // then we get the distance to the point we are looking at
+    // we want to use the distance to the point as the priority, minimizing the distance
+    // we also want to punish cells that are further away from the current cell
+    // we can do this by adding the distance to the current cell to the distance to the point
+    // we really wanna emphasize the punishment for distance to the point
+    // the distnce if from the point we started with to the point we are looking at
+    queue.Enqueue(i, Vector3.Distance(points[i], point));
+    visited[i] = true;
+
+    while (queue.Count > 0) {
+      int current = queue.Dequeue();
+      if (!occupiedCells[current]) {
+        return current;
+      }
+      for (int j = 0; j < edges[current].Count; j++) {
+        if (!visited[edges[current][j]]) {
+          float distanceToGoal = Vector3.Distance(points[edges[current][j]], point);
+          float distanceToStart = Vector3.Distance(points[edges[current][j]], points[i]) + 1.0f;
+          queue.Enqueue(edges[current][j], distanceToGoal + distanceToStart * distanceToStart * distanceToStart);
+          visited[edges[current][j]] = true;
+        }
+      }
+    }
+
+    return -1;
 
 
   }

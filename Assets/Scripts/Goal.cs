@@ -22,6 +22,11 @@ public class Goal : MonoBehaviour
     [SerializeField]
     private float spawnHeight = 1.0f;
 
+    [SerializeField]
+    private float timeToGetGoal = 4.0f;
+
+    private float respawnTimer = 0.0f;
+
     private void Respawn() {
         //enable the goal
 
@@ -58,6 +63,19 @@ public class Goal : MonoBehaviour
         if (timeSinceDespawn >= respawnTime) {
             Respawn();
         }
+
+        // if (inPlay) {
+        //     respawnTimer += Time.deltaTime;
+        // }
+
+        // if (respawnTimer >= timeToGetGoal) {
+        //     Respawn();
+        //     respawnTimer = 0.0f;
+        // }
+
+
+
+
     }
 
     private void Despawn() {

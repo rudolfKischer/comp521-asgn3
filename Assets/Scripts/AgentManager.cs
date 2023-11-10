@@ -188,21 +188,25 @@ public class AgentManager : MonoBehaviour
 
     }
 
-    private void SetHumanSpeed(GameObject human) {
-        //we want to set the speed, so that the human takes 10 seconds to cross the terrain
-        //get the dimensions of the terrain
+    private float GetHumanSpeed() {
         Vector3 terrainDimensions = terrainObject.transform.lossyScale;
         //get the x and z components of the terrain dimensions
         float terrainX = terrainDimensions.x;
         float terrainZ = terrainDimensions.z;
         //get the x and z components of the human colliders aabb bounds
+        // get the first human in the list
+        if (humans.Count == 0) {
+            return 0.0f;
+        }
+        GameObject human = humans[0];
         Collider humanCollider = human.GetComponent<Collider>();
         Vector3 humanBounds = humanCollider.bounds.size;
         float humanX = humanBounds.x;
         float humanZ = humanBounds.z;
         //set the speed of the human so that it takes 10 seconds to cross the terrain
         float speed = (terrainX + terrainZ) / (humanTimeToCrossTerrain * (humanX + humanZ));
-        human.GetComponent<Human>().speed = speed;
+        return speed;
+
     }
 
     void SpawnAgents() {
@@ -211,12 +215,13 @@ public class AgentManager : MonoBehaviour
         gridSpacing = GetGridSpacing();
 
         humans = InstatiateAgents(humanPrefab, numHumans);
+        float speed = GetHumanSpeed();
         for (int i = 0; i < humans.Count; i++) {
             Human humanComponent = humans[i].GetComponent<Human>();
             humanComponent.goal = goalObject;
             //we want to set the speed, so that the human takes 10 seconds to cross the terrain
             //get the dimensions of the terrain
-            SetHumanSpeed(humans[i]);
+            humans[i].GetComponent<Human>().speed = speed;
         }
         chairs = InstatiateAgents(chairPrefab, numChairs);
         if (lockChairMovement) {
@@ -224,6 +229,10 @@ public class AgentManager : MonoBehaviour
             for (int i = 0; i < chairs.Count; i++) {
                 Rigidbody rigidBody = chairs[i].GetComponent<Rigidbody>();
                 rigidBody.constraints = RigidbodyConstraints.FreezeAll;
+            }
+            // set chair to be half od humans speed
+            for (int i = 0; i < chairs.Count; i++) {
+                chairs[i].GetComponent<Agent>().speed = speed * 0.66f;
             }
         }
 
@@ -251,33 +260,54 @@ public class AgentManager : MonoBehaviour
 
     }
 
+    public List<Vector3> GetPath(int start, int end) {
+
+        // get the path from the A* solver
+        AStarSolver solver = AStarSolver.Instance;
+        List<int> path = solver.Solve(start, end);
+
+        // convert the path from a list of indices to a list of points
+        List<Vector3> pathPoints = new List<Vector3>();
+        foreach (int index in path) {
+            pathPoints.Add(navMesh.GetPoint(index));
+        }
+        pathPoints.Add(navMesh.GetPoint(end));
+
+        return pathPoints;
+
+
+    }
+
+    public List<Vector3> GetPath(Vector3 start, Vector3 end) {
+        int startIndex = navMesh.GetPointIndex(start);
+        int endIndex = navMesh.GetPointIndex(end);
+        startIndex = navMesh.GetClosestUnoccupiedTowardsPoint(startIndex, end);
+        endIndex = navMesh.GetClosestUnoccupiedTowardsPoint(endIndex, start);
+        if (startIndex == -1) {
+            Debug.Log("No unoccupied point found.");
+            return new List<Vector3>();
+        }
+
+        return GetPath(startIndex, endIndex);
+    }
+
+
 
     public void SetPathHuman(GameObject human) {
       Vector3 start = human.transform.position;
       Vector3 end = human.GetComponent<Human>().goal.transform.position;
-      int startIndex = navMesh.GetPointIndex(start);
-      int endIndex = navMesh.GetPointIndex(end);
-      startIndex = navMesh.GetClosestUnoccupied(startIndex);
-      endIndex = navMesh.GetClosestUnoccupied(endIndex);
-      if (startIndex == -1) {
-          Debug.Log("No unoccupied point found.");
-          human.GetComponent<Human>().SetPath(new List<Vector3>());
-          return ;
-      }
-
-      // get the path from the A* solver
-      AStarSolver solver = AStarSolver.Instance;
-      List<int> path = solver.Solve(startIndex, endIndex);
-
-      // convert the path from a list of indices to a list of points
-      List<Vector3> pathPoints = new List<Vector3>();
-      foreach (int index in path) {
-          pathPoints.Add(navMesh.GetPoint(index));
-      }
-      pathPoints.Add(end);
+      List<Vector3> pathPoints = GetPath(start, end);
 
       // set the path of the human
       human.GetComponent<Human>().SetPath(pathPoints);
+    }
+
+    public void SetPathChair(GameObject chair) {
+      Vector3 start = chair.transform.position;
+      GameObject closestPlayer = GetClosestHuman(start);
+      Vector3 end = closestPlayer.transform.position;
+      List<Vector3> pathPoints = GetPath(start, end);
+      chair.GetComponent<Agent>().SetPath(pathPoints);
     }
 
     public void SetHumanPaths() {
@@ -319,6 +349,43 @@ public class AgentManager : MonoBehaviour
                 MarkPathedCells(path);
             }
         }
+    }
+
+    private GameObject GetClosestHuman(Vector3 position) {
+        GameObject closestPlayer = null;
+        float closestDistance = Mathf.Infinity;
+        foreach (GameObject player in humans) {
+            float distance = Vector3.Distance(position, player.transform.position);
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                closestPlayer = player;
+            }
+        }
+        return closestPlayer;
+    }
+
+
+    private void SetAllChairPaths() {
+      // set the path of each chair to the closest player
+      for (int i = 0; i < chairs.Count; i++) {
+        Agent chairComponent = chairs[i].GetComponent<Agent>();
+        //if the path is not dirty, skip
+        if (!chairComponent.dirtyPath) {
+          continue;
+        }
+        SetPathChair(chairs[i]);
+        chairComponent.dirtyPath = false;
+      }
+
+      // display the path of each chair
+      for (int i = 0; i < chairs.Count; i++) {
+        //mark pathed cells
+        Agent chairComponent = chairs[i].GetComponent<Agent>();
+        List<Vector3> path = chairComponent.GetPath();
+        if (path != null && path.Count > 0) {
+            MarkPathedCells(path);
+        }
+      }
     }
 
 
@@ -363,11 +430,16 @@ public class AgentManager : MonoBehaviour
 
     }
 
+
+
     void Update()
     { 
         if (!goalObject.GetComponent<Goal>().inPlay) {
             for (int i = 0; i < humans.Count; i++) {
                 humans[i].GetComponent<Human>().SetPath(new List<Vector3>());
+            }
+            for (int i = 0; i < chairs.Count; i++) {
+                chairs[i].GetComponent<Agent>().SetPath(new List<Vector3>());
             }
             // freexe their velocity
             for (int i = 0; i < global_agents.Count; i++) {
@@ -385,14 +457,42 @@ public class AgentManager : MonoBehaviour
                 navMesh.navCollisionBound = 0.25f * humanCollider.bounds.size.x;
             }
         }
-        navMesh.ClearOccupiedCells();
-        navMesh.OccupyCells(chairs);
-        if (humanObstacles) {
-            navMesh.OccupyCells(global_agents);
+
+        float humanWidth = 0.0f;
+        if (humans.Count > 0) {
+            Collider humanCollider = humans[0].GetComponent<Collider>();
+            if (humanCollider != null) {
+                humanWidth = humanCollider.bounds.size.x;
+            }
         }
+
+        if (lockChairMovement) {
+          // dont pathfind for chairs
+        }
+        navMesh.ClearOccupiedCells();
+        navMesh.OccupyCells(humans, 0.0f);
+        navMesh.OccupyCells(chairs, -humanWidth * 0.7f);
+        SetSolverGraph();
+        SetAllChairPaths();
+
+
+
+        navMesh.ClearOccupiedCells();
+        //we want to set the bound dist to be 0 on humans
+        // and then on chairs we want to set it to the width of a human collider
+        // this is so that the path planning goes far out of its way to avoid chairs
+        // but not humans
+        float humanBoundDist = -humanWidth * 0.75f;
+        float chairBoundDist = 0.0f;
+
+        navMesh.OccupyCells(humans, humanBoundDist);
+        navMesh.OccupyCells(chairs, chairBoundDist);
         SetSolverGraph();
         SetHumanPaths();
         MarkAllHumansPaths();
+
+
+
 
         // if the goal is not in play
         // clear the players paths
